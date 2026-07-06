@@ -175,6 +175,26 @@ cd client && npm run dev     # http://localhost:3000
 
 Frontend proxies `/api` and `/socket.io` to the backend during dev (see `client/vite.config.js`).
 
+### Test locally with NO database (in-memory mode)
+The **same API works whether or not MongoDB is connected**. If `MONGO_URI` is unset (or the DB is
+unreachable), the backend automatically uses a built-in **in-memory store** with an identical
+async API — so you can run and fully test the whole app on any host with **zero DB setup**:
+
+```bash
+cd server && npm install && npm start   # no .env / no MONGO_URI needed → in-memory
+# Health check will report:  {"status":"ok","store":"in-memory",...}
+```
+
+When you're ready to persist data, just set `MONGO_URI` (see DEPLOYMENT_GUIDE.md) and restart —
+the health check will then report `"store":"mongodb"`. No code changes required.
+
+### Production-style preview (matches Netlify)
+To preview exactly what Netlify serves (no Vite dev client / HMR):
+```bash
+cd client && npm run build           # build dist/
+cd .. && pm2 start ecosystem.config.cjs   # calmer-client serves dist/ via preview-server.cjs
+```
+
 ---
 
 ## 7. Deployment
@@ -194,4 +214,9 @@ See **`DEPLOYMENT_GUIDE.md`** for a complete, copy-paste, step-by-step guide.
 - **Store mode**: MongoDB when `MONGO_URI` set, else in-memory fallback
 - **Build**: Client `npm run build` ✅ passes
 - **API**: Full lifecycle verified (auth, products, orders, status, chat, rating, analytics) ✅
-- **Last Updated**: 2026-07-04
+- **Browser**: Verified in real browser — **zero console errors** ✅
+- **Fonts & icons**: Self-hosted (bundled via `@fontsource` + `@fortawesome`) — no external CDN,
+  works offline and on any host ✅
+- **Dual-mode**: Same API works with **or without** MongoDB (in-memory fallback) — run locally
+  with zero DB setup ✅
+- **Last Updated**: 2026-07-06
