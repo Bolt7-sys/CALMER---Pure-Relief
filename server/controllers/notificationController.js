@@ -14,7 +14,7 @@ export async function listNotifications(req, res) {
 // PATCH /api/notifications/:id/read
 export async function markRead(req, res) {
   try {
-    await store.markNotificationRead(req.params.id)
+    await store.markNotificationRead(req.params.id, req.user._id)
     return res.json({ message: 'Marked read' })
   } catch (err) {
     return res.status(500).json({ error: 'Failed', detail: err.message })

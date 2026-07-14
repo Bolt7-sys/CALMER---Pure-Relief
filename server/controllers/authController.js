@@ -84,3 +84,47 @@ export async function login(req, res) {
 export async function me(req, res) {
   return res.json({ user: req.user })
 }
+
+// PATCH /api/auth/profile — update own profile (never role/passkey/username)
+export async function updateProfile(req, res) {
+  try {
+    const { fullName, email, phone } = req.body || {}
+    const patch = {}
+    if (fullName != null) patch.fullName = String(fullName).slice(0, 80)
+    if (email != null) {
+      const e = String(email).trim().toLowerCase()
+      if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return res.status(400).json({ error: 'Invalid email address.' })
+      patch.email = e
+    }
+    if (phone != null) patch.phone = String(phone).slice(0, 30)
+    if (!Object.keys(patch).length) return res.status(400).json({ error: 'Nothing to update.' })
+    const user = await store.updateUser(req.user._id, patch)
+    return res.json({ user: { id: String(user._id), username: user.username, role: user.role, fullName: user.fullName, email: user.email, phone: user.phone } })
+  } catch (err) {
+    return res.status(500).json({ error: 'Profile update failed', detail: err.message })
+  }
+}
+
+// GET /api/auth/favorites
+export async function listFavorites(req, res) {
+  try {
+    const user = await store.findUserById(req.user._id)
+    return res.json({ favorites: user?.favorites || [] })
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to load favorites', detail: err.message })
+  }
+}
+
+// POST /api/auth/favorites/:productId — toggle a favorite
+export async function toggleFavorite(req, res) {
+  try {
+    const pid = String(req.params.productId)
+    const user = await store.findUserById(req.user._id)
+    const favs = (user?.favorites || []).map(String)
+    const next = favs.includes(pid) ? favs.filter(f => f !== pid) : [...favs, pid].slice(0, 200)
+    await store.updateUser(req.user._id, { favorites: next })
+    return res.json({ favorites: next, favorited: next.includes(pid) })
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to update favorites', detail: err.message })
+  }
+}

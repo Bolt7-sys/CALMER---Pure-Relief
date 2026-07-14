@@ -21,17 +21,23 @@ import './index.css'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { CartProvider } from './context/CartContext.jsx'
 import { ToastProvider } from './components/Toast.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
+import OfflineBanner from './components/OfflineBanner.jsx'
+import './lib/pwa.js' // capture beforeinstallprompt as early as possible
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <ToastProvider>
-        <AuthProvider>
-          <CartProvider>
-            <App />
-          </CartProvider>
-        </AuthProvider>
-      </ToastProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ToastProvider>
+          <AuthProvider>
+            <CartProvider>
+              <OfflineBanner />
+              <App />
+            </CartProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>
 )

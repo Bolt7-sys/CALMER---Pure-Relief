@@ -1,6 +1,7 @@
 // Socket.io real-time layer for CALMER: notifications, live tracking, chat, calls.
 import { Server } from 'socket.io'
 import { verifyToken } from './utils/auth.js'
+import { store } from './data/store.js'
 
 let io = null
 
@@ -10,9 +11,13 @@ let io = null
 //   clients         — all client sockets (broadcasts)
 //   order:<orderId> — participants of an order (chat + live location)
 
+const validCoord = (lat, lng) =>
+  Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)) &&
+  Math.abs(Number(lat)) <= 90 && Math.abs(Number(lng)) <= 180
+
 export function initSocket(httpServer) {
   io = new Server(httpServer, {
-    cors: { origin: '*', methods: ['GET', 'POST'] }
+    cors: { origin: process.env.CLIENT_ORIGIN || '*', methods: ['GET', 'POST'] }
   })
 
   // Authenticate socket via JWT (handshake auth or query)
@@ -29,35 +34,54 @@ export function initSocket(httpServer) {
     socket.join(`user:${userId}`)
     socket.join(role === 'admin' ? 'admins' : 'clients')
 
-    // Join a specific order room (for chat + tracking)
-    socket.on('order:join', (orderId) => {
-      if (orderId) socket.join(`order:${orderId}`)
+    // SECURITY: verify order ownership before joining its room. Without this,
+    // any authenticated client could snoop other customers' chats & live locations.
+    socket.on('order:join', async (orderId) => {
+      if (!orderId) return
+      try {
+        const order = await store.findOrderById(String(orderId))
+        if (!order) return
+        if (role !== 'admin' && String(order.clientId) !== String(userId)) return
+        socket.join(`order:${orderId}`)
+      } catch { /* invalid id — ignore */ }
     })
     socket.on('order:leave', (orderId) => {
       if (orderId) socket.leave(`order:${orderId}`)
     })
 
-    // Typing indicator relay
+    // Relays below only fire if the sender actually joined the room —
+    // a raw emit can't bypass the ownership check in order:join.
+    const inOrderRoom = (orderId) => socket.rooms.has(`order:${orderId}`)
+
     socket.on('chat:typing', ({ orderId, typing }) => {
-      if (orderId) socket.to(`order:${orderId}`).emit('chat:typing', { orderId, role, typing })
+      if (orderId && inOrderRoom(orderId)) {
+        socket.to(`order:${orderId}`).emit('chat:typing', { orderId, role, typing: !!typing })
+      }
     })
 
     // WebRTC-style call signaling relay (built-in calls)
     socket.on('call:signal', ({ orderId, signal, kind }) => {
-      if (orderId) socket.to(`order:${orderId}`).emit('call:signal', { orderId, signal, kind, from: role })
+      if (orderId && inOrderRoom(orderId)) {
+        socket.to(`order:${orderId}`).emit('call:signal', { orderId, signal, kind, from: role })
+      }
     })
     socket.on('call:invite', ({ orderId, kind }) => {
-      if (orderId) socket.to(`order:${orderId}`).emit('call:invite', { orderId, kind, from: role })
+      if (orderId && inOrderRoom(orderId)) {
+        socket.to(`order:${orderId}`).emit('call:invite', { orderId, kind: kind === 'video' ? 'video' : 'voice', from: role })
+      }
     })
     socket.on('call:end', ({ orderId }) => {
-      if (orderId) socket.to(`order:${orderId}`).emit('call:end', { orderId, from: role })
+      if (orderId && inOrderRoom(orderId)) {
+        socket.to(`order:${orderId}`).emit('call:end', { orderId, from: role })
+      }
     })
 
-    // Live rider location relay (admin streams location -> order room)
+    // Live rider location stream — admin only, coordinates validated
     socket.on('location:update', ({ orderId, latitude, longitude }) => {
-      if (orderId != null && latitude != null && longitude != null) {
+      if (role !== 'admin') return
+      if (orderId != null && validCoord(latitude, longitude) && inOrderRoom(orderId)) {
         io.to(`order:${orderId}`).emit('order:location', {
-          orderId, riderLocation: { latitude, longitude, timestamp: new Date() }
+          orderId, riderLocation: { latitude: Number(latitude), longitude: Number(longitude), timestamp: new Date() }
         })
       }
     })

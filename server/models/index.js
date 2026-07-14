@@ -9,6 +9,7 @@ const userSchema = new Schema({
   fullName: String,
   email: String,
   phone: String,
+  favorites: { type: [String], default: [] }, // product ids the user hearted
   isActive: { type: Boolean, default: true }
 }, { timestamps: true })
 
@@ -40,12 +41,21 @@ const orderSchema = new Schema({
   totalAmount: { type: Number, required: true },
   paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'paid' },
   paymentMethod: String,
-  deliveryStatus: { type: String, enum: ['processing', 'on_the_way', 'near', 'delivered'], default: 'processing' },
+  deliveryStatus: { type: String, enum: ['processing', 'on_the_way', 'near', 'delivered', 'cancelled'], default: 'processing' },
   deliveryAddress: { street: String, city: String, postalCode: String, notes: String },
   liveLocation: { latitude: Number, longitude: Number, pinned: { type: Boolean, default: false }, timestamp: Date },
   riderLocation: { latitude: Number, longitude: Number, timestamp: Date },
   estimatedDeliveryTime: { type: Number, default: 25 },
-  rating: Number
+  subtotal: Number,
+  deliveryFee: { type: Number, default: 5 },
+  promoCode: String,
+  discount: { type: Number, default: 0 },
+  statusHistory: [{ status: String, at: Date }],
+  deliveredAt: Date,
+  cancelledAt: Date,
+  cancelReason: String,
+  rating: Number,
+  ratingComment: String
 }, { timestamps: true })
 
 const notificationSchema = new Schema({
@@ -54,7 +64,8 @@ const notificationSchema = new Schema({
   type: String,
   title: String,
   message: String,
-  read: { type: Boolean, default: false }
+  read: { type: Boolean, default: false },       // for direct (recipientId) notifications
+  readBy: { type: [String], default: [] }        // per-user reads for role broadcasts (recipientId null)
 }, { timestamps: true })
 
 const messageSchema = new Schema({

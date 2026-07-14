@@ -72,7 +72,7 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-3 mt-3">
           {CATEGORIES.map(c => (
             <button key={c.name} onClick={() => navigate(`/shop?category=${c.name}`)}
-              className="card p-4 text-left hover:border-rich-gold/40 transition group">
+              className="card card-lift p-4 text-left hover:border-rich-gold/40 transition group">
               <div className="w-10 h-10 rounded-full bg-gold-gradient/20 border border-rich-gold/30 grid place-items-center mb-2 group-hover:scale-110 transition">
                 <i className={`fa-solid ${c.icon} text-rich-gold`}></i>
               </div>
@@ -135,7 +135,7 @@ function SectionTitle({ title, action, onAction }) {
 
 function ProductCard({ p, onOpen, onAdd }) {
   return (
-    <div className="card overflow-hidden group">
+    <div className="card card-lift overflow-hidden group">
       <button onClick={onOpen} className="block w-full">
         <div className="relative h-32 bg-black/40 overflow-hidden">
           <img src={resolveImage(p.imageUrl)} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />

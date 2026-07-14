@@ -1,9 +1,10 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { getSocket } from '../lib/socket'
+import { onSocket } from '../lib/socket'
 import { useToast } from '../components/Toast'
 import Logo from '../components/Logo'
+import { InstallAppButton } from '../components/InstallApp'
 import api from '../lib/api'
 
 const NAV = [
@@ -24,13 +25,17 @@ export default function AdminLayout() {
 
   useEffect(() => {
     api.get('/notifications').then(({ data }) => setUnread(data.notifications.filter(n => !n.read).length)).catch(() => {})
-    const socket = getSocket()
-    if (!socket) return
-    const onNotif = (n) => { setUnread(u => u + 1); toast.info(`${n.title}: ${n.message}`) }
-    const onNewOrder = () => toast.success('New order received!')
-    socket.on('notification', onNotif)
-    socket.on('order:new', onNewOrder)
-    return () => { socket.off('notification', onNotif); socket.off('order:new', onNewOrder) }
+
+    // Attach real-time listeners the moment a socket exists (no mount-order race)
+    let detach = null
+    const unsub = onSocket((socket) => {
+      const onNotif = (n) => { setUnread(u => u + 1); toast.notify(`${n.title}: ${n.message}`) }
+      const onNewOrder = () => toast.success('New order received!')
+      socket.on('notification', onNotif)
+      socket.on('order:new', onNewOrder)
+      detach = () => { socket.off('notification', onNotif); socket.off('order:new', onNewOrder) }
+    })
+    return () => { unsub(); if (detach) detach() }
   }, [])
 
   const Sidebar = (
@@ -46,8 +51,10 @@ export default function AdminLayout() {
           </NavLink>
         ))}
       </nav>
-      <div className="p-3 border-t border-rich-gold/10">
-        <div className="card p-4 text-center mb-3">
+      <div className="p-3 border-t border-rich-gold/10 space-y-3">
+        {/* Admins can install CALMER on their phone too */}
+        <InstallAppButton variant="full" className="!py-3 !text-sm" />
+        <div className="card p-4 text-center">
           <div className="heading text-lg text-white">Stay Calm.<br />We Deliver.</div>
           <i className="fa-solid fa-cannabis text-rich-gold mt-2"></i>
         </div>
@@ -74,12 +81,13 @@ export default function AdminLayout() {
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         {/* Topbar */}
         <header className="glass-strong px-4 lg:px-6 py-3 flex items-center justify-between border-b border-rich-gold/10">
-          <button onClick={() => setOpen(true)} className="lg:hidden w-10 h-10 rounded-full glass grid place-items-center text-soft-gold"><i className="fa-solid fa-bars"></i></button>
+          <button onClick={() => setOpen(true)} aria-label="Open menu" className="lg:hidden w-10 h-10 rounded-full glass grid place-items-center text-soft-gold"><i className="fa-solid fa-bars"></i></button>
           <div className="hidden lg:block" />
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/admin/chat')} className="w-10 h-10 rounded-full glass grid place-items-center text-soft-gold relative">
+            <div className="lg:hidden"><InstallAppButton variant="compact" /></div>
+            <button onClick={() => navigate('/admin/chat')} aria-label="Notifications" className="w-10 h-10 rounded-full glass grid place-items-center text-soft-gold relative">
               <i className="fa-solid fa-bell"></i>
-              {unread > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-gold-gradient text-black text-[10px] font-bold grid place-items-center">{unread}</span>}
+              {unread > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-gold-gradient text-black text-[10px] font-bold grid place-items-center">{unread > 99 ? '99+' : unread}</span>}
             </button>
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-full bg-gold-gradient grid place-items-center text-black font-bold">{user?.username?.[7]?.toUpperCase() || 'A'}</div>

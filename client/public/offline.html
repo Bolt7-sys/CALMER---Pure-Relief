@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0A0A0A" />
+  <title>CALMER - You're Offline</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { margin: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh; display: grid; place-items: center;
+      background: radial-gradient(circle at 50% 0%, #1a1710 0%, #0A0A0A 70%);
+      color: #EDE7DA; font-family: Georgia, 'Times New Roman', serif; text-align: center; padding: 24px;
+    }
+    .brand {
+      font-size: 42px; letter-spacing: 0.15em; font-weight: 700;
+      background: linear-gradient(135deg, #FFE28A 0%, #FFD700 40%, #D4AF37 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .tag { font-size: 11px; letter-spacing: 0.4em; color: rgba(212,175,55,.6); margin-top: 8px; text-transform: uppercase; }
+    .leaf { font-size: 52px; margin-bottom: 18px; filter: drop-shadow(0 0 18px rgba(255,215,0,.35)); animation: float 4s ease-in-out infinite; }
+    @keyframes float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
+    h1 { font-size: 22px; margin-top: 28px; color: #fff; font-weight: 500; }
+    p { font-size: 14px; color: rgba(212,175,55,.65); margin-top: 10px; max-width: 340px; line-height: 1.6; }
+    button {
+      margin-top: 28px; padding: 14px 36px; border: none; border-radius: 999px; cursor: pointer;
+      background: linear-gradient(135deg, #FFE27A 0%, #FFD700 40%, #D4AF37 100%);
+      color: #1a1400; font-weight: 700; font-size: 15px; font-family: inherit;
+      box-shadow: 0 6px 24px rgba(255,215,0,.28); transition: transform .2s;
+    }
+    button:hover { transform: translateY(-2px); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="leaf">&#127807;</div>
+    <div class="brand">CALMER</div>
+    <div class="tag">Breathe &middot; Unwind &middot; Elevate</div>
+    <h1>You're offline</h1>
+    <p>Take a deep breath. Your connection drifted away &mdash; CALMER will be right here when you're back online.</p>
+    <button onclick="location.reload()">Reconnect</button>
+  </main>
+  <script>
+    window.addEventListener('online', function () { location.reload() })
+  </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../../lib/api'
-import { getSocket } from '../../lib/socket'
+import { getSocket, onSocket } from '../../lib/socket'
 import { useAuth } from '../../context/AuthContext'
 import CallOverlay from '../../components/CallOverlay'
 
@@ -18,17 +18,18 @@ export default function Chat() {
 
   useEffect(() => {
     api.get(`/chat/${id}`).then(({ data }) => { setMessages(data.messages); setOrder(data.order) }).catch(() => navigate('/orders'))
-    const socket = getSocket()
-    if (socket) {
+    // onSocket handles the socket-connects-after-mount race
+    const off = onSocket((socket) => {
       socket.emit('order:join', id)
-      const onMsg = (m) => { if (String(m.orderId) === String(id)) setMessages(prev => [...prev, m]) }
+      const onMsg = (m) => { if (String(m.orderId) === String(id)) setMessages(prev => prev.some(x => x._id && x._id === m._id) ? prev : [...prev, m]) }
       const onInvite = ({ kind }) => setCall(kind)
       const onEnd = () => setCall(null)
       socket.on('chat:message', onMsg)
       socket.on('call:invite', onInvite)
       socket.on('call:end', onEnd)
       return () => { socket.emit('order:leave', id); socket.off('chat:message', onMsg); socket.off('call:invite', onInvite); socket.off('call:end', onEnd) }
-    }
+    })
+    return () => off?.()
   }, [id])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])

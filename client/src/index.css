@@ -7,6 +7,8 @@
   --rich-gold: #FFD700;
   --warm-amber: #FFC107;
   --soft-gold: #D4AF37;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
 }
 
 * { -webkit-tap-highlight-color: transparent; }
@@ -18,6 +20,23 @@ body {
   color: #EDE7DA;
   font-family: 'Inter', system-ui, sans-serif;
   overflow-x: hidden;
+}
+
+/* Accessibility: visible gold focus ring for keyboard users only */
+:focus-visible {
+  outline: 2px solid rgba(255, 215, 0, .75);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Respect users who prefer less motion (vestibular safety) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Scrollbar */
@@ -38,6 +57,7 @@ body {
   .glass-strong {
     background: rgba(17, 15, 12, 0.85);
     backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 215, 0, 0.18);
   }
   .gold-text {
@@ -53,9 +73,22 @@ body {
     border-radius: 9999px;
     transition: transform .2s, box-shadow .2s, filter .2s;
     box-shadow: 0 6px 24px rgba(255,215,0,.28);
+    position: relative;
+    overflow: hidden;
   }
   .btn-gold:hover { transform: translateY(-2px); filter: brightness(1.06); box-shadow: 0 10px 32px rgba(255,215,0,.42); }
   .btn-gold:active { transform: translateY(0); }
+  /* sheen sweep on hover */
+  .btn-gold::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.55) 50%, transparent 60%);
+    transform: translateX(-120%);
+    transition: transform .6s ease;
+    pointer-events: none;
+  }
+  .btn-gold:hover::after { transform: translateX(120%); }
+
   .btn-ghost {
     background: rgba(255,215,0,.06);
     border: 1px solid rgba(255,215,0,.25);
@@ -65,10 +98,35 @@ body {
   }
   .btn-ghost:hover { background: rgba(255,215,0,.12); }
 
+  /* ==== Install CALMER App button: unmissable, breathing gold glow ==== */
+  .install-btn {
+    background: linear-gradient(135deg, #FFE27A 0%, #FFD700 45%, #D4AF37 100%);
+    color: #1a1400;
+    box-shadow: 0 0 0 0 rgba(255,215,0,.45), 0 8px 28px rgba(255,215,0,.3);
+    animation: install-pulse 2.6s ease-in-out infinite;
+    transition: transform .2s, filter .2s;
+  }
+  .install-btn:hover { transform: translateY(-2px) scale(1.01); filter: brightness(1.07); }
+  .install-btn:active { transform: translateY(0) scale(.99); }
+  .install-btn::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.5) 50%, transparent 60%);
+    transform: translateX(-130%);
+    animation: install-sheen 3.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+
   .card {
     background: linear-gradient(160deg, rgba(30,26,20,.9), rgba(14,12,10,.9));
     border: 1px solid rgba(255,215,0,.1);
     border-radius: 1.25rem;
+    transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+  }
+  .card-lift:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255,215,0,.3);
+    box-shadow: 0 14px 36px rgba(0,0,0,.5), 0 4px 18px rgba(255,215,0,.12);
   }
   .input-dark {
     background: rgba(255,255,255,.04);
@@ -82,6 +140,10 @@ body {
     border-color: rgba(255,215,0,.6);
     box-shadow: 0 0 0 3px rgba(255,215,0,.12);
   }
+  .input-dark:focus-within {
+    border-color: rgba(255,215,0,.6);
+    box-shadow: 0 0 0 3px rgba(255,215,0,.12);
+  }
   .chip {
     border-radius: 9999px;
     border: 1px solid rgba(255,215,0,.18);
@@ -92,6 +154,47 @@ body {
     color: #1a1400;
     border-color: transparent;
   }
+
+  /* skeleton shimmer for loading states */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255,255,255,.04);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,215,0,.07), transparent);
+    animation: skeleton-sweep 1.4s ease-in-out infinite;
+  }
+
+  /* ambient aurora glow behind hero/landing sections */
+  .aurora {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(38% 30% at 22% 18%, rgba(255,215,0,.10) 0%, transparent 70%),
+      radial-gradient(30% 26% at 80% 30%, rgba(255,193,7,.07) 0%, transparent 70%),
+      radial-gradient(46% 34% at 55% 85%, rgba(212,175,55,.08) 0%, transparent 70%);
+    animation: aurora-drift 14s ease-in-out infinite alternate;
+  }
+
+  /* safe-area helpers for installed PWA (notch phones) */
+  .pb-safe { padding-bottom: calc(0.5rem + var(--safe-bottom)); }
+  .pt-safe { padding-top: calc(0.75rem + var(--safe-top)); }
+}
+
+@keyframes install-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,215,0,.4), 0 8px 28px rgba(255,215,0,.28); }
+  50% { box-shadow: 0 0 0 9px rgba(255,215,0,0), 0 8px 34px rgba(255,215,0,.44); }
+}
+@keyframes install-sheen {
+  0%, 55% { transform: translateX(-130%); }
+  85%, 100% { transform: translateX(130%); }
+}
+@keyframes skeleton-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+@keyframes aurora-drift {
+  from { transform: translate3d(0,0,0) scale(1); opacity: .85; }
+  to { transform: translate3d(0,-14px,0) scale(1.05); opacity: 1; }
 }
 
 /* fade-in helper */
@@ -112,3 +215,10 @@ body {
   animation: dash 1.2s linear infinite;
 }
 @keyframes dash { to { stroke-dashoffset: -28; } }
+
+/* toast slide-in */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-12px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast-item { animation: toast-in .35s cubic-bezier(.21,1.02,.73,1) both; }

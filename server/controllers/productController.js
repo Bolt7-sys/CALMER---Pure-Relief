@@ -1,5 +1,15 @@
 import { store } from '../data/store.js'
 
+const VALID_CATEGORIES = ['Flower', 'Oils', 'Edibles', 'Vapes', 'Concentrates', 'Accessories']
+
+function validateProductFields({ name, category, price, stock }) {
+  if (name != null && !String(name).trim()) return 'Name cannot be empty.'
+  if (category != null && !VALID_CATEGORIES.includes(category)) return `Category must be one of: ${VALID_CATEGORIES.join(', ')}.`
+  if (price != null && (!Number.isFinite(Number(price)) || Number(price) < 0 || Number(price) > 100000)) return 'Price must be a number between 0 and 100000.'
+  if (stock != null && (!Number.isFinite(Number(stock)) || Number(stock) < 0 || !Number.isInteger(Number(stock)))) return 'Stock must be a non-negative whole number.'
+  return null
+}
+
 // GET /api/products?category=Flower
 export async function listProducts(req, res) {
   try {
@@ -29,6 +39,8 @@ export async function createProduct(req, res) {
     if (!name || !category || price == null) {
       return res.status(400).json({ error: 'name, category and price are required.' })
     }
+    const invalid = validateProductFields({ name, category, price, stock })
+    if (invalid) return res.status(400).json({ error: invalid })
     const product = await store.createProduct({
       name, description: description || '', category,
       price: Number(price), thcContent: thcContent || '', cbdContent: cbdContent || '',
@@ -45,6 +57,10 @@ export async function createProduct(req, res) {
 export async function updateProduct(req, res) {
   try {
     const patch = { ...req.body }
+    // Strip fields nobody should mass-assign
+    delete patch._id; delete patch.createdAt; delete patch.updatedAt
+    const invalid = validateProductFields(patch)
+    if (invalid) return res.status(400).json({ error: invalid })
     if (patch.price != null) patch.price = Number(patch.price)
     if (patch.stock != null) patch.stock = Number(patch.stock)
     const product = await store.updateProduct(req.params.id, patch)

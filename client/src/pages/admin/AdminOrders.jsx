@@ -3,15 +3,24 @@ import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import { resolveImage } from '../../lib/images'
 import { useToast } from '../../components/Toast'
-import { getSocket } from '../../lib/socket'
+import { onSocket } from '../../lib/socket'
 
 const STATUSES = [
   { key: 'processing', label: 'Preparing' },
   { key: 'on_the_way', label: 'On the way' },
   { key: 'near', label: 'Near you' },
-  { key: 'delivered', label: 'Delivered' }
+  { key: 'delivered', label: 'Delivered' },
+  { key: 'cancelled', label: 'Cancelled' }
 ]
 const FILTERS = [{ key: 'all', label: 'All' }, ...STATUSES]
+// Mirrors the server-side state machine so the UI never offers illegal jumps
+const TRANSITIONS = {
+  processing: ['on_the_way', 'near', 'delivered', 'cancelled'],
+  on_the_way: ['near', 'delivered', 'cancelled'],
+  near: ['delivered', 'cancelled'],
+  delivered: [],
+  cancelled: []
+}
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState([])
@@ -26,19 +35,26 @@ export default function AdminOrders() {
   }
   useEffect(load, [filter])
   useEffect(() => {
-    const s = getSocket(); if (!s) return
-    const onNew = () => load()
-    s.on('order:new', onNew)
-    return () => s.off('order:new', onNew)
+    // onSocket fires even if the socket connects after mount
+    const off = onSocket((s) => {
+      const onNew = () => load()
+      s.on('order:new', onNew)
+      return () => s.off('order:new', onNew)
+    })
+    return () => off?.()
   }, [filter])
 
   async function updateStatus(order, status) {
+    if (order.deliveryStatus === status) return
+    if (status === 'cancelled' && !window.confirm(`Cancel order ${order.orderNumber}? Items will be restocked.`)) return
     try {
       const { data } = await api.patch(`/orders/${order._id}/status`, { deliveryStatus: status })
       setOrders(prev => prev.map(o => o._id === order._id ? data.order : o))
       if (active?._id === order._id) setActive(data.order)
       toast.success(`Order marked "${STATUSES.find(s => s.key === status)?.label}"`)
-    } catch { toast.error('Update failed') }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Update failed')
+    }
   }
 
   return (
@@ -70,10 +86,19 @@ export default function AdminOrders() {
               <div className="w-10 h-10 rounded-lg glass grid place-items-center text-[10px] text-soft-gold/60 ring-2 ring-black">{o.items.length} items</div>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {STATUSES.map(s => (
-                <button key={s.key} onClick={() => updateStatus(o, s.key)}
-                  className={`text-[10px] px-2.5 py-1.5 rounded-full transition ${o.deliveryStatus === s.key ? 'bg-gold-gradient text-black font-semibold' : 'chip text-soft-gold/60'}`}>{s.label}</button>
-              ))}
+              {STATUSES.map(s => {
+                const isCurrent = o.deliveryStatus === s.key
+                const allowed = (TRANSITIONS[o.deliveryStatus] || []).includes(s.key)
+                const isCancel = s.key === 'cancelled'
+                return (
+                  <button key={s.key} onClick={() => allowed && updateStatus(o, s.key)} disabled={!isCurrent && !allowed}
+                    className={`text-[10px] px-2.5 py-1.5 rounded-full transition ${isCurrent
+                      ? (isCancel ? 'bg-red-500/80 text-white font-semibold' : 'bg-gold-gradient text-black font-semibold')
+                      : allowed
+                        ? (isCancel ? 'chip text-red-400 hover:bg-red-400/10' : 'chip text-soft-gold/60 hover:bg-white/10')
+                        : 'chip text-soft-gold/25 cursor-not-allowed'}`}>{s.label}</button>
+                )
+              })}
             </div>
             <div className="flex gap-2 mt-3">
               <button onClick={() => setActive(o)} className="btn-ghost flex-1 py-2 text-xs">Details</button>
@@ -105,7 +130,20 @@ export default function AdminOrders() {
               <div><i className="fa-solid fa-user text-rich-gold mr-2"></i>{active.clientUsername} · {active.clientPhone || 'no phone'}</div>
               <div><i className="fa-solid fa-location-dot text-rich-gold mr-2"></i>{active.deliveryAddress?.street}, {active.deliveryAddress?.city}</div>
               <div><i className="fa-solid fa-credit-card text-rich-gold mr-2"></i>{active.paymentMethod} · {active.paymentStatus}</div>
+              {active.promoCode && <div><i className="fa-solid fa-tag text-emerald-400 mr-2"></i>{active.promoCode} · -${Number(active.discount || 0).toFixed(2)}</div>}
+              <div><i className="fa-solid fa-sack-dollar text-rich-gold mr-2"></i>Total ${active.totalAmount.toFixed(2)}</div>
             </div>
+            {Array.isArray(active.statusHistory) && active.statusHistory.length > 0 && (
+              <div className="card p-3 mt-3 text-[11px] text-soft-gold/60 space-y-1 max-h-32 overflow-y-auto">
+                <div className="text-soft-gold/40 uppercase text-[10px] tracking-wide mb-1">Status history</div>
+                {active.statusHistory.map((h, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span>{STATUSES.find(s => s.key === h.status)?.label || h.status}</span>
+                    <span className="text-soft-gold/40">{new Date(h.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

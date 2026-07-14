@@ -49,6 +49,7 @@ export const store = {
   async createUser(d) { return usingMongo ? (await User.create(d)).toObject() : memCreate('users', d) },
   async findUserByUsername(u) { return usingMongo ? (await User.findOne({ username: u }))?.toObject() || null : memFindOne('users', { username: u }) },
   async findUserById(id) { return usingMongo ? (await User.findById(id))?.toObject() || null : memFindById('users', id) },
+  async updateUser(id, patch) { return usingMongo ? (await User.findByIdAndUpdate(id, patch, { new: true }))?.toObject() || null : memUpdate('users', id, patch) },
 
   // PRODUCTS
   async createProduct(d) { return usingMongo ? (await Product.create(d)).toObject() : memCreate('products', d) },
@@ -60,6 +61,26 @@ export const store = {
   async findProductById(id) { return usingMongo ? (await Product.findById(id))?.toObject() || null : memFindById('products', id) },
   async updateProduct(id, patch) { return usingMongo ? (await Product.findByIdAndUpdate(id, patch, { new: true }))?.toObject() || null : memUpdate('products', id, patch) },
   async deleteProduct(id) { if (usingMongo) { await Product.findByIdAndDelete(id); return true } return memDelete('products', id) },
+  // Atomically decrement stock; returns null if not enough stock (prevents overselling races)
+  async decrementStock(id, qty) {
+    if (usingMongo) {
+      return (await Product.findOneAndUpdate(
+        { _id: id, stock: { $gte: qty } },
+        { $inc: { stock: -qty } },
+        { new: true }
+      ))?.toObject() || null
+    }
+    const d = mem.products.find(x => String(x._id) === String(id))
+    if (!d || Number(d.stock) < qty) return null
+    d.stock = Number(d.stock) - qty; d.updatedAt = new Date().toISOString()
+    return clone(d)
+  },
+  async incrementStock(id, qty) {
+    if (usingMongo) { return (await Product.findByIdAndUpdate(id, { $inc: { stock: qty } }, { new: true }))?.toObject() || null }
+    const d = mem.products.find(x => String(x._id) === String(id))
+    if (!d) return null
+    d.stock = Number(d.stock) + qty; return clone(d)
+  },
 
   // ORDERS
   async createOrder(d) { return usingMongo ? (await Order.create(d)).toObject() : memCreate('orders', d) },
@@ -74,13 +95,44 @@ export const store = {
   // NOTIFICATIONS
   async createNotification(d) { return usingMongo ? (await Notification.create(d)).toObject() : memCreate('notifications', d) },
   async listNotifications(userId, role) {
-    if (usingMongo) return (await Notification.find({ $or: [{ recipientId: userId }, { recipientId: null, recipientRole: role }] }).sort({ createdAt: -1 }).limit(50)).map(x => x.toObject())
-    return memFind('notifications', {}, { sort: { createdAt: -1 } }).filter(n => String(n.recipientId) === String(userId) || (n.recipientId == null && n.recipientRole === role)).slice(0, 50)
+    const normalize = (n) => ({
+      ...n,
+      // effective read state for THIS user (broadcasts track per-user readBy)
+      read: n.recipientId ? !!n.read : (n.readBy || []).map(String).includes(String(userId))
+    })
+    if (usingMongo) {
+      const rows = await Notification.find({ $or: [{ recipientId: userId }, { recipientId: null, recipientRole: role }] }).sort({ createdAt: -1 }).limit(50)
+      return rows.map(x => normalize(x.toObject()))
+    }
+    return memFind('notifications', {}, { sort: { createdAt: -1 } })
+      .filter(n => String(n.recipientId) === String(userId) || (n.recipientId == null && n.recipientRole === role))
+      .slice(0, 50).map(normalize)
   },
-  async markNotificationRead(id) { return usingMongo ? (await Notification.findByIdAndUpdate(id, { read: true })) : memUpdate('notifications', id, { read: true }) },
+  // Per-user reads: direct notifications flip `read`; role broadcasts append userId to `readBy`
+  // (fixes the bug where one admin reading a broadcast marked it read for ALL admins).
+  async markNotificationRead(id, userId) {
+    if (usingMongo) {
+      const n = await Notification.findById(id); if (!n) return null
+      if (n.recipientId) { n.read = true } else { if (!n.readBy?.includes(String(userId))) n.readBy = [...(n.readBy || []), String(userId)] }
+      await n.save(); return n.toObject()
+    }
+    const n = mem.notifications.find(x => String(x._id) === String(id)); if (!n) return null
+    if (n.recipientId) n.read = true
+    else { n.readBy = n.readBy || []; if (!n.readBy.includes(String(userId))) n.readBy.push(String(userId)) }
+    return clone(n)
+  },
   async markAllRead(userId, role) {
-    if (usingMongo) { await Notification.updateMany({ $or: [{ recipientId: userId }, { recipientId: null, recipientRole: role }] }, { read: true }); return true }
-    mem.notifications.forEach(n => { if (String(n.recipientId) === String(userId) || (n.recipientId == null && n.recipientRole === role)) n.read = true }); return true
+    if (usingMongo) {
+      await Notification.updateMany({ recipientId: userId }, { read: true })
+      await Notification.updateMany({ recipientId: null, recipientRole: role }, { $addToSet: { readBy: String(userId) } })
+      return true
+    }
+    mem.notifications.forEach(n => {
+      if (String(n.recipientId) === String(userId)) n.read = true
+      else if (n.recipientId == null && n.recipientRole === role) {
+        n.readBy = n.readBy || []; if (!n.readBy.includes(String(userId))) n.readBy.push(String(userId))
+      }
+    }); return true
   },
 
   // MESSAGES

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { gsap } from 'gsap'
 import { IMG } from '../lib/images'
 import Logo from '../components/Logo'
+import { InstallAppButton } from '../components/InstallApp'
 
 // Cinematic scroll-based landing:
 // - Two stacked leaf images: "assembled" (crossfades out) and "explode" (crossfades in)
@@ -123,6 +124,10 @@ export default function Landing() {
         <div className="flex flex-col sm:flex-row gap-3 mt-8">
           <button onClick={() => navigate('/auth')} className="btn-gold px-8 py-4 text-base"><i className="fa-solid fa-arrow-right-to-bracket mr-2"></i>Get Started</button>
           <button onClick={() => navigate('/auth')} className="btn-ghost px-8 py-4 text-base">I have a Passkey</button>
+        </div>
+        {/* Install CALMER App — clear, visible install CTA right on the landing page */}
+        <div className="mt-6 w-full max-w-sm">
+          <InstallAppButton variant="full" />
         </div>
         <div className="mt-16 text-[11px] text-soft-gold/30">
           <div className="font-brand text-lg gold-text">CALMER</div>

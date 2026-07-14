@@ -18,8 +18,8 @@ export default function Analytics() {
   const t = data.totals
   const cards = [
     { label: 'Total Revenue', value: `$${t.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: 'fa-sack-dollar' },
-    { label: 'Total Orders', value: t.orders, icon: 'fa-receipt' },
-    { label: 'Customers', value: t.clients, icon: 'fa-users' },
+    { label: "Today's Revenue", value: `$${(t.todayRevenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: 'fa-calendar-day' },
+    { label: 'Avg Order Value', value: `$${(t.avgOrderValue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: 'fa-receipt' },
     { label: 'Avg Rating', value: t.avgRating || '—', icon: 'fa-star' }
   ]
 
@@ -106,8 +106,8 @@ export default function Analytics() {
         {[
           { label: 'Active Orders', value: t.activeOrders, icon: 'fa-truck-fast' },
           { label: 'Delivered', value: t.deliveredOrders, icon: 'fa-circle-check' },
-          { label: 'Products', value: t.products, icon: 'fa-box' },
-          { label: 'Delivery Avg', value: '23 min', icon: 'fa-clock' }
+          { label: 'Cancelled', value: t.cancelledOrders ?? 0, icon: 'fa-ban' },
+          { label: 'Customers', value: t.clients, icon: 'fa-users' }
         ].map(s => (
           <div key={s.label} className="card p-4 text-center">
             <i className={`fa-solid ${s.icon} text-rich-gold text-xl`}></i>

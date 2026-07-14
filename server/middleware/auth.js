@@ -13,7 +13,10 @@ export async function requireAuth(req, res, next) {
   const user = await store.findUserById(payload.id)
   if (!user || !user.isActive) return res.status(401).json({ error: 'Account not found or disabled' })
 
-  req.user = { _id: String(user._id), username: user.username, role: user.role, fullName: user.fullName }
+  req.user = {
+    _id: String(user._id), username: user.username, role: user.role,
+    fullName: user.fullName, email: user.email || '', phone: user.phone || ''
+  }
   next()
 }
 

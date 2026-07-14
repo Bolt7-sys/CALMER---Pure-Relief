@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import api from '../../lib/api'
 import MapView from '../../components/MapView'
 import { useToast } from '../../components/Toast'
+import { onSocket } from '../../lib/socket'
 
 const STATUSES = [
   { key: 'processing', label: 'Preparing', p: 0.08 },
@@ -9,6 +10,14 @@ const STATUSES = [
   { key: 'near', label: 'Near you', p: 0.8 },
   { key: 'delivered', label: 'Delivered', p: 1 }
 ]
+// Mirrors the server state machine so the UI never offers illegal jumps
+const TRANSITIONS = {
+  processing: ['on_the_way', 'near', 'delivered'],
+  on_the_way: ['near', 'delivered'],
+  near: ['delivered'],
+  delivered: [],
+  cancelled: []
+}
 
 export default function AdminTracking() {
   const [orders, setOrders] = useState([])
@@ -17,20 +26,31 @@ export default function AdminTracking() {
 
   function load() {
     api.get('/orders').then(({ data }) => {
-      const active = data.orders.filter(o => o.deliveryStatus !== 'delivered')
+      // Cancelled orders don't need tracking either
+      const active = data.orders.filter(o => !['delivered', 'cancelled'].includes(o.deliveryStatus))
       setOrders(active)
       setSelected(s => active.find(o => o._id === s?._id) || active[0] || null)
     }).catch(() => {})
   }
-  useEffect(load, [])
+  useEffect(() => {
+    load()
+    // Refresh list live when orders arrive or change status elsewhere
+    const off = onSocket((socket) => {
+      const refresh = () => load()
+      socket.on('order:new', refresh)
+      socket.on('order:status', refresh)
+      return () => { socket.off('order:new', refresh); socket.off('order:status', refresh) }
+    })
+    return () => off?.()
+  }, [])
 
   async function setStatus(status) {
-    if (!selected) return
+    if (!selected || selected.deliveryStatus === status) return
     try {
       const { data } = await api.patch(`/orders/${selected._id}/status`, { deliveryStatus: status })
       setSelected(data.order); load()
       toast.success('Status updated & customer notified')
-    } catch { toast.error('Update failed') }
+    } catch (err) { toast.error(err?.response?.data?.message || 'Update failed') }
   }
 
   const progress = STATUSES.find(s => s.key === selected?.deliveryStatus)?.p ?? 0.1
@@ -76,10 +96,14 @@ export default function AdminTracking() {
               </div>
               <div className="text-[11px] text-soft-gold/50 uppercase mb-2">Update Status (notifies customer)</div>
               <div className="flex flex-wrap gap-2">
-                {STATUSES.map(s => (
-                  <button key={s.key} onClick={() => setStatus(s.key)}
-                    className={`text-xs px-3 py-2 rounded-full transition ${selected.deliveryStatus === s.key ? 'bg-gold-gradient text-black font-semibold' : 'chip text-soft-gold/60'}`}>{s.label}</button>
-                ))}
+                {STATUSES.map(s => {
+                  const isCurrent = selected.deliveryStatus === s.key
+                  const allowed = (TRANSITIONS[selected.deliveryStatus] || []).includes(s.key)
+                  return (
+                    <button key={s.key} onClick={() => allowed && setStatus(s.key)} disabled={!isCurrent && !allowed}
+                      className={`text-xs px-3 py-2 rounded-full transition ${isCurrent ? 'bg-gold-gradient text-black font-semibold' : allowed ? 'chip text-soft-gold/60 hover:bg-white/10' : 'chip text-soft-gold/25 cursor-not-allowed'}`}>{s.label}</button>
+                  )
+                })}
               </div>
             </div>
           )}

@@ -102,15 +102,20 @@ Base URL: `/api`  · Auth: `Authorization: Bearer <JWT>`
 | POST   | `/auth/register`              | –      | Create account, returns passkey once |
 | POST   | `/auth/login`                 | –      | Login with username + passkey        |
 | GET    | `/auth/me`                    | user   | Current user                         |
+| PATCH  | `/auth/profile`               | user   | Update own name/email/phone          |
+| GET    | `/auth/favorites`             | user   | List favorite product ids            |
+| POST   | `/auth/favorites/:productId`  | user   | Toggle a favorite                    |
 | GET    | `/products`                   | user   | List products                        |
 | GET    | `/products/:id`               | user   | Product detail                       |
 | POST   | `/products`                   | admin  | Create product                       |
 | PATCH  | `/products/:id`               | admin  | Update product                       |
 | DELETE | `/products/:id`               | admin  | Delete product                       |
-| POST   | `/orders`                     | client | Create order (checkout)              |
+| POST   | `/orders/quote`               | client | Server-priced quote + promo validation |
+| POST   | `/orders`                     | client | Create order (server-priced, atomic stock) |
 | GET    | `/orders`                     | user   | List orders (own / all for admin)    |
 | GET    | `/orders/:id`                 | user   | Order detail                         |
-| PATCH  | `/orders/:id/status`          | admin  | Update delivery status               |
+| PATCH  | `/orders/:id/status`          | admin  | Update delivery status (state machine) |
+| PATCH  | `/orders/:id/cancel`          | client | Cancel own order while `processing` (restocks) |
 | PATCH  | `/orders/:id/location`        | user   | Update rider / client pin location   |
 | PATCH  | `/orders/:id/rate`            | client | Rate a delivered order (1–5)         |
 | GET    | `/notifications`              | user   | List notifications                   |
@@ -121,7 +126,11 @@ Base URL: `/api`  · Auth: `Authorization: Bearer <JWT>`
 | POST   | `/chat/:orderId`              | user   | Send message                         |
 | GET    | `/analytics/overview`         | admin  | KPIs, revenue-by-day, top products   |
 
-**Valid delivery statuses**: `processing` → `on_the_way` → `near` → `delivered`.
+**Valid delivery statuses**: `processing` → `on_the_way` → `near` → `delivered`, with
+`cancelled` reachable from any non-final state. Illegal jumps are rejected server-side.
+
+**Promo codes** (validated server-side only): `CALM10` (10% off), `ELEVATE20` (20% off, min $100),
+`GOLDENLEAF` ($15 off, min $60), `FREESHIP` (free delivery).
 
 ### Socket.io Events (real-time)
 - Rooms: `user:<id>`, `admins`, `clients`, `order:<id>`
@@ -132,24 +141,41 @@ Base URL: `/api`  · Auth: `Authorization: Bearer <JWT>`
 
 ## 5. Features
 
+**📲 PWA — Install CALMER App on your phone (clients AND admins)**
+- ✅ `manifest.webmanifest` (maskable icons, shortcuts to Shop / Orders / Admin)
+- ✅ Service worker: offline fallback page, network-first HTML, cache-first hashed assets — never caches `/api` or `/socket.io`
+- ✅ **“Install CALMER App — In your phone” gold button** on: Landing page CTA, client header, client Profile menu, admin sidebar + admin mobile topbar
+- ✅ Native install prompt on Chrome/Android/desktop; step-by-step guide modal for iOS Safari (Share → Add to Home Screen)
+- ✅ Button auto-hides once the app is installed (standalone display-mode detection)
+
 **Client App**
 - ✅ Cinematic scroll-driven landing (explode / re-assemble golden leaf)
 - ✅ CALMER passkey register + login (dual-account)
 - ✅ Home with hero, categories, new arrivals, featured (GSAP fade-up)
-- ✅ Shop with category tabs + search
-- ✅ Product detail with THC/CBD chips + quantity
-- ✅ Cart, 2-step checkout (address + geolocation pin, payment), order confirmation
-- ✅ Live order tracking: status timeline, ETA, animated gold route line on map
-- ✅ Built-in chat + voice/video call overlay
-- ✅ Real-time notifications, rate order, profile
+- ✅ Shop with category tabs + search + ❤️ favorites (optimistic toggle) + sold-out badges
+- ✅ Product detail with THC/CBD chips, low-stock warning, qty capped at available stock
+- ✅ Cart, 2-step checkout (address + geolocation pin, payment) with **promo codes** + order confirmation
+- ✅ Live order tracking: status timeline, **live ETA countdown**, animated gold route map, cancelled-state UI
+- ✅ Client can **cancel** a `processing` order (auto-restocks)
+- ✅ Built-in chat + voice/video call overlay (race-free `onSocket` subscriptions)
+- ✅ Real-time notifications with chime, rate order, editable profile (name + phone)
 
 **Admin Dashboard**
-- ✅ Overview KPIs + live map + recent orders
-- ✅ Orders management with status controls + detail modal
+- ✅ Overview KPIs (today's revenue, active orders, avg order value, avg rating) — live socket refresh
+- ✅ **Low-stock alert strip** linking to product management
+- ✅ Orders management with **state-machine status controls** (illegal jumps disabled), cancel-with-restock, status history + promo details in modal
 - ✅ Product CRUD with image picker
-- ✅ Live tracking of active deliveries
+- ✅ Live tracking of active deliveries (auto-excludes delivered/cancelled, live refresh)
 - ✅ Communications (chat + calls + broadcast)
-- ✅ Analytics (revenue area chart, category pie, top-products bar)
+- ✅ Analytics (revenue area chart, today's revenue, AOV, cancelled count, category pie, top-products bar)
+
+**Security hardening (server)**
+- ✅ Server-side price recomputation — client-sent prices are ignored (anti-tamper)
+- ✅ Atomic stock decrement with rollback — no overselling under concurrency
+- ✅ Socket room ownership checks — clients can only join their own order rooms
+- ✅ Rate limiting (auth brute-force + checkout spam), security headers, JWT sessions
+- ✅ Status-transition state machine, collision-resistant order numbers
+- ✅ Per-user notification read state (`readBy`), cancelled orders excluded from revenue
 
 ---
 
@@ -215,8 +241,12 @@ See **`DEPLOYMENT_GUIDE.md`** for a complete, copy-paste, step-by-step guide.
 - **Build**: Client `npm run build` ✅ passes
 - **API**: Full lifecycle verified (auth, products, orders, status, chat, rating, analytics) ✅
 - **Browser**: Verified in real browser — **zero console errors** ✅
+- **PWA**: Installable on phones (Android/Chrome native prompt + iOS guide), offline fallback,
+  Install buttons for both clients and admins ✅
+- **Security**: Price tamper test, illegal status transition test, non-cancellable-after-dispatch
+  test, cancel-restock test, invalid promo test — all verified via curl ✅
 - **Fonts & icons**: Self-hosted (bundled via `@fontsource` + `@fortawesome`) — no external CDN,
   works offline and on any host ✅
 - **Dual-mode**: Same API works with **or without** MongoDB (in-memory fallback) — run locally
   with zero DB setup ✅
-- **Last Updated**: 2026-07-06
+- **Last Updated**: 2026-07-14

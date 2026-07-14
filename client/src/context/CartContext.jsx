@@ -3,6 +3,8 @@ import { createContext, useContext, useState, useEffect } from 'react'
 const CartContext = createContext(null)
 export const useCart = () => useContext(CartContext)
 
+const MAX_QTY = 50 // mirror of server-side cap
+
 export function CartProvider({ children }) {
   const [items, setItems] = useState(() => {
     try { return JSON.parse(localStorage.getItem('calmer_cart') || '[]') } catch { return [] }
@@ -10,20 +12,34 @@ export function CartProvider({ children }) {
 
   useEffect(() => { localStorage.setItem('calmer_cart', JSON.stringify(items)) }, [items])
 
+  // Clear in-memory cart when auth is lost (logout / expired token) so the
+  // next user on a shared device never sees a stranger's cart.
+  useEffect(() => {
+    const clearCart = () => setItems([])
+    window.addEventListener('calmer:unauthorized', clearCart)
+    window.addEventListener('calmer:logout', clearCart)
+    return () => {
+      window.removeEventListener('calmer:unauthorized', clearCart)
+      window.removeEventListener('calmer:logout', clearCart)
+    }
+  }, [])
+
   function add(product, qty = 1) {
     setItems(prev => {
       const idx = prev.findIndex(i => i.productId === product._id)
       if (idx >= 0) {
-        const next = [...prev]; next[idx] = { ...next[idx], quantity: next[idx].quantity + qty }; return next
+        const next = [...prev]
+        next[idx] = { ...next[idx], quantity: Math.min(MAX_QTY, next[idx].quantity + qty) }
+        return next
       }
       return [...prev, {
         productId: product._id, name: product.name, price: product.price,
-        imageUrl: product.imageUrl, category: product.category, quantity: qty
+        imageUrl: product.imageUrl, category: product.category, quantity: Math.min(MAX_QTY, qty)
       }]
     })
   }
   function setQty(productId, qty) {
-    setItems(prev => prev.map(i => i.productId === productId ? { ...i, quantity: Math.max(1, qty) } : i))
+    setItems(prev => prev.map(i => i.productId === productId ? { ...i, quantity: Math.min(MAX_QTY, Math.max(1, qty)) } : i))
   }
   function remove(productId) { setItems(prev => prev.filter(i => i.productId !== productId)) }
   function clear() { setItems([]) }

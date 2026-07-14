@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import api from '../../lib/api'
-import { getSocket } from '../../lib/socket'
+import { getSocket, onSocket } from '../../lib/socket'
 import { useAuth } from '../../context/AuthContext'
 import CallOverlay from '../../components/CallOverlay'
 import { useToast } from '../../components/Toast'
@@ -22,13 +22,14 @@ export default function AdminChat() {
   useEffect(() => {
     if (!selected) return
     api.get(`/chat/${selected._id}`).then(({ data }) => setMessages(data.messages)).catch(() => {})
-    const socket = getSocket()
-    if (socket) {
+    // onSocket handles the socket-connects-after-mount race
+    const off = onSocket((socket) => {
       socket.emit('order:join', selected._id)
-      const onMsg = (m) => { if (String(m.orderId) === String(selected._id)) setMessages(prev => [...prev, m]) }
+      const onMsg = (m) => { if (String(m.orderId) === String(selected._id)) setMessages(prev => prev.some(x => x._id && x._id === m._id) ? prev : [...prev, m]) }
       socket.on('chat:message', onMsg)
       return () => { socket.emit('order:leave', selected._id); socket.off('chat:message', onMsg) }
-    }
+    })
+    return () => off?.()
   }, [selected])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])

@@ -19,6 +19,12 @@ export function AuthProvider({ children }) {
         .catch(() => { localStorage.removeItem('calmer_token'); localStorage.removeItem('calmer_user'); setUser(null) })
         .finally(() => setLoading(false))
     } else setLoading(false)
+
+    // If ANY api call gets a 401 (expired token), sync React state immediately —
+    // otherwise the UI stays "logged in" while every request silently fails.
+    const onUnauthorized = () => { setUser(null); disconnectSocket() }
+    window.addEventListener('calmer:unauthorized', onUnauthorized)
+    return () => window.removeEventListener('calmer:unauthorized', onUnauthorized)
   }, [])
 
   function persist(token, u) {
@@ -40,15 +46,25 @@ export function AuthProvider({ children }) {
     return data // includes one-time passkey
   }
 
+  async function updateProfile(patch) {
+    const { data } = await api.patch('/auth/profile', patch)
+    const merged = { ...user, ...data.user }
+    setUser(merged)
+    localStorage.setItem('calmer_user', JSON.stringify(merged))
+    return merged
+  }
+
   function logout() {
     localStorage.removeItem('calmer_token')
     localStorage.removeItem('calmer_user')
+    localStorage.removeItem('calmer_cart') // privacy: don't leak one user's cart into the next login
     setUser(null)
     disconnectSocket()
+    window.dispatchEvent(new CustomEvent('calmer:logout'))
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   )
